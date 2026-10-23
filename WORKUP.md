@@ -19,6 +19,14 @@ Everything below was derived by reading the sources in `sources/` and by running
 `lab/`. The exploitability claims are measured output of `lab/verify.sh` (14 assertions, all
 passing — see Appendix B), not restatements of an advisory database.
 
+**The short version.** Log4j reads two files by fixed name from the classpath — one of them is
+`log4j2.system.properties` — and does what they say: the file's keys become JVM system
+properties, and the file can point Log4j at a different configuration file and switch scripting
+on. Someone who can put that file on the classpath therefore controls the application's JVM
+configuration and can run code in it, on the current Log4j release, with no attacker data in the
+logs and nothing in the logs to show for it. The whole analysis follows; §1 is the mechanism,
+§2–§4 are the measurements, §5 and §8–§10 are the scale, §6–§7 are what to do about it.
+
 ### Severity rationale
 
 | Metric | Value | Justification, grounded in this lab |
