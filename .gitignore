@@ -1,0 +1,6 @@
+# build outputs and downloaded artifacts (see setup.sh)
+lab/build/
+lib/
+sources/
+*.class
+*.log
