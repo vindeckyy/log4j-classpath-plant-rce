@@ -1,5 +1,11 @@
 # Apache Log4j — the classpath resources Log4j trusts without asking
 
+> **Video.** [`video/out/log4j-classpath-plant-poc.mp4`](video/out/log4j-classpath-plant-poc.mp4)
+> (1920×1080, ~8 min) walks through the proof of concept end to end: the mechanism, the live
+> exploit, the negative control, the supply-chain case, the outbound-traffic capture, the
+> comparison with Log4Shell, and the remediation. Every command in it runs `lab/` on localhost.
+> Rebuild it with [`video/README.md`](video/README.md).
+
 > **Disclosure status.**
 > The behaviour itself is a documented Log4j convenience. The *security* consequence — that a
 > classpath resource silently reconfigures the JVM and takes over Log4j's configuration — has
@@ -472,6 +478,7 @@ carries no target list. The command it executes in the victim JVM is `id`.
 | `WORKUP.md` | the full write-up: root cause with `file:line` evidence, the measured exploitability matrix, the CVSS rationale, the target/reach/impact analysis, detection, remediation, and limitations |
 | `lab/` | the proof-of-concept: victim apps, the planted classpath resources, the attacker-side proxy, and `verify.sh` |
 | `scan/scan_planted.py` | finds planted Log4j classpath resources on disk and inside jars |
+| `video/` | the proof-of-concept video: script, renderer and the rendered `mp4` + `srt` |
 | `setup.sh` | downloads the jars and the sources the citations point at |
 | `lib/`, `sources/`, `lab/build/` | downloaded artifacts and build output, created by `setup.sh` and `lab/build.sh` — not stored in git |
 

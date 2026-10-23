@@ -1,0 +1,207 @@
+1
+00:00:01,200 --> 00:00:07,794
+Two text files. One classpath. Full code execution inside a Java application that never asked for it.
+
+2
+00:00:08,014 --> 00:00:24,861
+This is a finding in Apache Log4j, the logging library that sits inside a large part of the Java ecosystem. It affects the current release. The proof of concept, the full analysis and the disclosure record are public at github.com/vindeckyy/log4j-classpath-plant-rce.
+
+3
+00:00:26,481 --> 00:00:29,998
+Quick background, for people who do not work with Java every day.
+
+4
+00:00:30,218 --> 00:00:43,442
+Log4j is a logging library. Applications use it to write lines into their log files: user logged in, request failed, payment declined. It runs inside the application process, so it is trusted code.
+
+5
+00:00:43,662 --> 00:00:54,831
+A Java application finds its code through the classpath: a list of jars and folders the runtime searches. Log4j lives there too, and it starts as soon as the application logs its first line.
+
+6
+00:00:55,951 --> 00:01:07,921
+Here is the first half of the problem. When Log4j starts, it looks for two specific file names on the classpath: log4j2.system.properties, and log4j2.component.properties.
+
+7
+00:01:08,141 --> 00:01:24,522
+If it finds them, it obeys them. Every key of the first file is copied into the JVM's system properties, which means global settings for the whole process. The second file configures Log4j itself, including which configuration file to load and which scripting languages are allowed.
+
+8
+00:01:24,742 --> 00:01:32,010
+Neither file has to be requested. Neither has to be enabled. And measured: Log4j prints no warning at all when it finds them.
+
+9
+00:01:33,130 --> 00:01:37,589
+This is the entire attack payload. Four meaningful lines in a plain text file.
+
+10
+00:01:37,809 --> 00:01:47,050
+One line points Log4j at a different configuration file: the attacker's, named pwn.xml. The value can name a resource inside the very same jar.
+
+11
+00:01:47,270 --> 00:01:54,619
+One more line enables scripting, which is off by default: log4j2.Script.enableLanguages equals Groovy.
+
+12
+00:01:54,839 --> 00:01:59,878
+That is all of it. No exploit string, no obfuscation, no reflection tricks.
+
+13
+00:02:00,998 --> 00:02:08,417
+And the configuration it points at is a normal Log4j configuration file with a single filter: a ScriptFilter that runs a Groovy script.
+
+14
+00:02:08,637 --> 00:02:17,669
+In this lab, the script runs id and writes a proof file. In a real attack, that script would be a reverse shell, a credential stealer, or ransomware.
+
+15
+00:02:17,889 --> 00:02:24,670
+So the chain is: planted file, then planted configuration, then attacker's code, all inside the victim's JVM.
+
+16
+00:02:25,890 --> 00:02:35,433
+Now watch it work. This is an ordinary Java application. It has no Log4j configuration of its own. It prints one line, and then makes its first log call.
+
+17
+00:02:35,653 --> 00:02:42,201
+The classpath is the usual Log4j jars, plus one folder: the folder where the attacker dropped the two files.
+
+18
+00:02:42,421 --> 00:02:45,753
+And the attacker's code executes inside the victim JVM.
+
+19
+00:02:46,773 --> 00:02:52,799
+Look at the order. The attacker's output printed first. The application's own first log line came after it.
+
+20
+00:02:53,019 --> 00:03:04,896
+Log4j initialised during that first log call, found the planted file, hijacked the configuration, and ran the script before the message was even rendered. The application never got a chance to notice.
+
+21
+00:03:05,916 --> 00:03:16,190
+To be sure this is not the lab's fault: the same application, without the planted file. Nothing happens. No property is set, no configuration is hijacked, no code runs.
+
+22
+00:03:16,410 --> 00:03:19,568
+The only difference between those two runs is one file.
+
+23
+00:03:20,588 --> 00:03:31,757
+Second surprise: the attack does not need Log4j's core. A large number of applications only have log4j-api, the thin layer, on the classpath, and never configure logging.
+
+24
+00:03:31,977 --> 00:03:41,045
+With only the API, Log4j says it could not find a logging provider, and carries on. But the planted file still rewrote the JVM's system properties.
+
+25
+00:03:41,265 --> 00:03:48,370
+So the exposed population is every application with Log4j on its classpath — not only the ones that configured it.
+
+26
+00:03:49,390 --> 00:03:54,893
+Third: the file does not have to sit loose in a directory. It can travel inside a dependency jar.
+
+27
+00:03:55,113 --> 00:04:03,426
+Here the same planted file was packaged into a jar the victim depends on. The victim runs with that jar on the classpath, and the code executes again.
+
+28
+00:04:03,646 --> 00:04:11,471
+That turns it into a supply-chain attack. The artifact is delivered by the normal release process, to every environment that consumes it.
+
+29
+00:04:12,491 --> 00:04:23,126
+And this is where it stops being a lab trick. Because the planted file sets JVM system properties, it reaches far beyond logging. Here the attacker planted the proxy host and proxy port.
+
+30
+00:04:23,346 --> 00:04:32,576
+The victim then made one ordinary outbound request, and it went to the attacker's proxy instead. The attacker captured it, including the credentials in the URL.
+
+31
+00:04:32,796 --> 00:04:42,943
+The same mechanism reaches the application's TLS trust store as well, so outbound HTTPS could be intercepted too. That last part is analysis, not measured here.
+
+32
+00:04:43,963 --> 00:04:46,122
+So, why is this dangerous.
+
+33
+00:04:46,342 --> 00:04:57,325
+One: no attacker-controlled data is needed. In Log4Shell the attacker had to get a string into a request that reached a log statement. Here, the file is the attack. Nothing has to be sent to the victim.
+
+34
+00:04:57,545 --> 00:05:09,828
+Two: it is not patched. Log4Shell was fixed in 2.17.1. This affects 2.26.1, the current release, and the same mechanism is present in the 3.x API source.
+
+35
+00:05:10,048 --> 00:05:22,564
+Three: it is silent. No warning, no log line. Worse, the attacker's configuration replaces the victim's, so the attacker also chooses the log level and the log destination. The trail is under their control.
+
+36
+00:05:22,784 --> 00:05:27,823
+Four: it survives restarts and redeploys, because the file is part of the artifact.
+
+37
+00:05:28,043 --> 00:05:39,862
+And five, the honest part: the attacker needs a writable classpath entry, or control of one dependency. That is the access condition, and it is why the base CVSS score is 7.8, not 10.
+
+38
+00:05:40,882 --> 00:05:45,584
+Side by side with Log4Shell, for the checklist people already have in their heads.
+
+39
+00:05:45,804 --> 00:06:00,072
+Log4Shell needed a vulnerable version, attacker data in the log path, and a victim action. This needs none of that. The current release is affected, no request has to be sent, and the attacker's own configuration decides what the logs say.
+
+40
+00:06:00,292 --> 00:06:06,121
+If your exposure review says we patched Log4Shell, this finding is still open for you.
+
+41
+00:06:07,141 --> 00:06:16,405
+One more thing about reach, and this is analysis rather than a measured compromise. The file is applied by every application that loads it, not by one application.
+
+42
+00:06:16,625 --> 00:06:31,591
+A single file in a shared deployment directory, a build workspace, or a dependency reaches staging, production, every region and every replica at once. The attacker does not have to find the application, guess a URL, or be lucky with timing.
+
+43
+00:06:31,811 --> 00:06:36,072
+That is why the classpath, and not the application, is the thing to audit.
+
+44
+00:06:37,092 --> 00:06:38,113
+What to do now.
+
+45
+00:06:38,333 --> 00:06:47,935
+Audit every classpath: deployment directories, container images, every jar in every artifact. A match for either file name is an incident, not a finding.
+
+46
+00:06:48,155 --> 00:06:57,292
+Remove them, then rebuild and redeploy the artifacts that contained them. Deleting the file from a running host is not enough — the next deploy brings it back.
+
+47
+00:06:57,512 --> 00:07:07,868
+Make the classpath a trust boundary. Nothing on it writable by another account, jars verified by checksum in CI, and the build workspace contents verified before packaging.
+
+48
+00:07:08,088 --> 00:07:14,833
+Keep scripting disabled. It is the execution path the plant uses, and without a scripting engine the chain fails closed.
+
+49
+00:07:15,053 --> 00:07:30,634
+And upstream: Log4j should not silently promote a classpath resource into JVM system properties. At minimum, opt in, warn through the StatusLogger when either file is found, and refuse to take the configuration location from a classpath resource.
+
+50
+00:07:31,854 --> 00:07:46,273
+This is a first disclosure. The finding has not been sent to any vendor or third party; the report text is published in the repository and goes to the Apache Logging Services security team, security@apache.org, under the project's ninety day process.
+
+51
+00:07:46,493 --> 00:07:58,336
+It was found in the same audit as a second Log4j finding, on configuration time evaluation of thread context data. Both are reported together, on one timeline, and both repositories are public.
+
+52
+00:07:58,556 --> 00:08:11,129
+If you run Log4j, forward the report. The full analysis, the reproduction steps, the detection script and the disclosure record are at github.com/vindeckyy/log4j-classpath-plant-rce.

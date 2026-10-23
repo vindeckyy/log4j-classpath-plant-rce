@@ -4,3 +4,15 @@ lib/
 sources/
 *.class
 *.log
+
+# video build intermediates (the rendered mp4/srt are kept)
+video/out/tts/
+video/out/preview/
+video/out/still_*.png
+video/out/narration.wav
+video/out/silent.mp4
+video/out/build.log
+
+# python bytecode
+__pycache__/
+*.pyc
