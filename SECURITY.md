@@ -12,11 +12,10 @@ project (a convenience feature); the security consequence — that a classpath r
 reconfigures the JVM and hijacks Log4j's configuration — is not addressed anywhere in that
 documentation or in any advisory.
 
-This finding was derived in the same audit as the configuration-time evaluation finding in the
-sibling repository `log4j-vuln-lab`, where it was first written up in that repository's
-history (commit `e31dbee`) before it was moved here for a separate disclosure. It has not been
-reported to the Apache Logging Services project or any other vendor, and it has not been
-published anywhere else.
+This finding was derived in the same audit as the configuration-time evaluation finding in
+<https://github.com/vindeckyy/log4j-config-time-lookup-rce>, and was moved into this repository
+for a separate disclosure. It has not been reported to the Apache Logging Services project or
+any other vendor, and it has not been published anywhere else.
 
 ## If you are affected
 

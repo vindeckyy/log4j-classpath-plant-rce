@@ -7,9 +7,9 @@
 > with any third party, and not published in an advisory, mailing list post, blog, conference
 > talk, preprint, issue tracker, or chat anywhere else.
 >
-> This finding was derived in the same audit as the configuration-time evaluation finding in the
-> sibling repository `log4j-vuln-lab`, where it was first written up in that repository's
-> history (commit `e31dbee`) before it was moved here for a separate disclosure.
+> This finding was derived in the same audit as the configuration-time evaluation finding in
+> <https://github.com/vindeckyy/log4j-config-time-lookup-rce>, and was moved into this
+> repository for a separate disclosure.
 >
 > If you run Log4j and this affects you, please forward this to the vendor:
 > <security@apache.org> (the Apache Logging Services security process, per
@@ -348,8 +348,9 @@ minimum it should:
 | `setup.sh` | downloads the jars and the sources the citations point at |
 | `lib/`, `sources/`, `lab/build/` | downloaded artifacts and build output, created by `setup.sh` and `lab/build.sh` — not stored in git |
 
-A sibling repository, `log4j-vuln-lab`, documents a separate finding in the same project:
-configuration-time evaluation of untrusted Thread Context Map data.
+A sibling repository, <https://github.com/vindeckyy/log4j-config-time-lookup-rce>, documents a
+separate finding in the same project: configuration-time evaluation of untrusted Thread Context
+Map data.
 
 ---
 
