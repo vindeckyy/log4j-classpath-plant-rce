@@ -18,12 +18,16 @@
 
 ## Proof-of-concept video
 
-[![Proof of concept: two text files on the classpath, full code execution](video/out/thumbnail.jpg)](video/out/log4j-classpath-plant-poc.mp4)
+[![Proof of concept: two text files on the classpath, full code execution](video/out/thumbnail.jpg)](https://vindeckyy.github.io/log4j-classpath-plant-rce/)
 
 **Two text files. One classpath. Full code execution.** — 8 minutes, 1080p, English narration with
-burned-in captions ([`.srt`](video/out/log4j-classpath-plant-poc.srt) alongside). The footage is
-captured from `lab/` when the video is rendered, so it shows the output the proof of concept
-actually prints; every command in it runs on localhost.
+burned-in captions. Click the frame to play it on the [player page](https://vindeckyy.github.io/log4j-classpath-plant-rce/),
+or [watch the mp4 directly](https://vindeckyy.github.io/log4j-classpath-plant-rce/log4j-classpath-plant-poc.mp4),
+or [download it](https://github.com/vindeckyy/log4j-classpath-plant-rce/releases/download/poc-video/log4j-classpath-plant-poc.mp4)
+([`.srt`](video/out/log4j-classpath-plant-poc.srt) alongside).
+
+The footage is captured from `lab/` when the video is rendered, so it shows the output the proof of
+concept actually prints; every command in it runs on localhost.
 
 | time | chapter |
 | --- | --- |

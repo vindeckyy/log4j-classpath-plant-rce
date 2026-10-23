@@ -37,3 +37,31 @@ Narration is synthesised per sentence, so the burned-in captions and the `.srt` 
 6. **Disclosure** — first disclosure, where the report goes, where the material lives.
 
 Every command in the video runs `lab/` on localhost only; nothing leaves the machine.
+
+## Publish it (GitHub only)
+
+GitHub strips `<video>` from README markdown and serves repository files as
+`application/octet-stream`, so neither an inline player nor a click-to-play link works from the
+repository alone. The video is therefore published on GitHub Pages, where the file is served as
+`video/mp4` and browsers play it inline.
+
+```bash
+# the player page lives in the repository
+cp video/pages/index.html video/out/thumbnail.jpg video/out/log4j-classpath-plant-poc.srt \
+   video/out/log4j-classpath-plant-poc.mp4 /tmp/ghpages/
+cd /tmp/ghpages && git init -b gh-pages && git add -A \
+   && git commit -m "Proof-of-concept video player page" \
+   && git push https://github.com/vindeckyy/log4j-classpath-plant-rce.git gh-pages:gh-pages
+
+# enable Pages for that branch (source: gh-pages, path: /)
+gh api --method POST repos/vindeckyy/log4j-classpath-plant-rce/pages \
+   -f source[branch]=gh-pages -f source[path]=/
+
+# a release asset gives the README a download link
+gh release create poc-video --title "Proof-of-concept video" --notes "..."
+gh release upload poc-video video/out/log4j-classpath-plant-poc.mp4
+```
+
+The player page is then at <https://vindeckyy.github.io/log4j-classpath-plant-rce/>, and the
+README links to it, to the mp4 directly, and to the release asset.
+
