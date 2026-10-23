@@ -9,7 +9,8 @@
 >
 > This finding was derived in the same audit as the configuration-time evaluation finding in
 > <https://github.com/vindeckyy/log4j-config-time-lookup-rce>, and was moved into this
-> repository for a separate disclosure.
+> repository for a separate disclosure. Both findings are reported together, on one timeline —
+> see [`DISCLOSURE.md`](DISCLOSURE.md).
 >
 > If you run Log4j and this affects you, please forward this to the vendor:
 > <security@apache.org> (the Apache Logging Services security process, per
@@ -17,11 +18,20 @@
 
 **Component:** `org.apache.logging.log4j:log4j-api` (the property loader) and
 `org.apache.logging.log4j:log4j-core` (the configuration it hijacks)
-**Severity:** Critical
-**CVSS 3.1:** `10.0 AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H`
+**Severity:** High
+**CVSS 3.1 (base):** `AV:L/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H` = **7.8 (High)**
+
+> **Why this vector.** The attacker's precondition is the ability to place a file on the
+> victim's classpath — write access to a classpath directory, or control of an artifact in the
+> dependency chain. That is a local write primitive, so the base vector scores it as
+> `AV:L / PR:L` with no scope change: the impact stays in the trust domain the attacker already
+> reached. **If the file is delivered through dependency resolution** — a poisoned artifact the
+> build resolves — the environmental vector becomes `AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H` = 10.0,
+> but that depends on the victim's build and is not the base case. The score above is the
+> weakest-access variant, on purpose: it is the one the finding requires to be true.
+
 **CWE:** CWE-426 (untrusted search path) → CWE-94 (improper control of generation of code) /
-CWE-200 (information exposure) / CWE-613 (insufficient session expiration — the hijacked
-configuration outlives the process that installed it)
+CWE-200 (information exposure)
 **Affected:** `log4j-api` / `log4j-core` 2.14.1 – **2.26.1** (current release) — verified by
 execution; the 3.x API source carries the same mechanism (source-level, see *Limitations*)
 **Found:** 2026-10-23
@@ -31,12 +41,35 @@ execution; the 3.x API source carries the same mechanism (source-level, see *Lim
 ## 0. In one sentence
 
 **If someone can put one small text file onto your application's classpath, they can run their
-own code inside your application — on the current Log4j release, with no exploit, no
-attacker-supplied request, and nothing in your logs to show for it.**
+own code inside your application — on the current Log4j release, with no attacker-supplied
+request, and with no warning in the application's own log output (measured).**
 
 That file is called `log4j2.system.properties` (or `log4j2.component.properties`). It is a few
 lines of text. It looks like configuration. Log4j reads it automatically, before your
 application has printed a single line, and then does what it says.
+
+**The attacker's precondition is the ability to place that file on the classpath** — write
+access to a classpath directory, or control of an artifact in the dependency chain. The score
+in the header reflects that precondition; see the CVSS note there.
+
+### What is measured here, and what is analysis
+
+**Measured** — reproduced in `lab/`, asserted by `lab/verify.sh` (15 checks):
+
+* code execution in the victim JVM on `log4j-core` 2.14.1, 2.17.1, 2.24.0, 2.25.1 and 2.26.1;
+* the same result through `log4j2.component.properties` alone, and through the file travelling
+  inside a dependency jar;
+* the JVM's system properties being rewritten with **`log4j-api` alone** — no `log4j-core`, no
+  logging provider;
+* outbound traffic redirection, with a request carrying credentials captured by a proxy;
+* a planted value that is itself a lookup expression being **evaluated recursively** at
+  configuration time — the runtime guardrail does not extend to this input channel (§5);
+* the negative control: without the file, nothing happens.
+
+**Analysis** — derived from the mechanism, not reproduced here:
+
+* how the file reaches a victim in practice (§4);
+* which other properties an attacker can set (§9 lists the ones that were actually exercised).
 
 ---
 
@@ -100,9 +133,9 @@ rendered.** There was no window in which the application could have noticed.
 | "Logging vulnerabilities need attacker data in my logs" | **No attacker data is needed at all.** The file is the attack. |
 | "I would need a vulnerable Log4j version" | **No.** Log4Shell was closed in 2.17.1; this was not, and 2.26.1 — the release in front of you — is affected. |
 | "My application doesn't use Log4j for output, so Log4j can't matter" | **`log4j-api` alone is enough.** No `log4j-core`, no appender, no configuration — the API prints *"Log4j API could not find a logging provider"* and still rewrites the JVM's system properties. |
-| "I would see something in my logs" | **You would not.** `StatusLogger` prints nothing when it finds the file. Worse: the attacker's configuration replaces yours, so it also decides the log level and the log destination — the evidence can be switched off. |
+| "I would see something in my logs" | **You would not.** `StatusLogger` prints nothing when it finds the file. Worse: the attacker's configuration replaces yours, so it also decides the log level and the log destination. |
 | "I'd need to intercept or spoof something" | **No interaction is needed.** The victim never has to send a request, click a link, or restart on a schedule. |
-| "It's one application, so it is one application" | **One file, an entire estate.** See §4. |
+| "It's one application, so it is one application" | **One file is applied by every application that loads it.** See §4 — analysis, not measurement. |
 
 ---
 
@@ -112,36 +145,39 @@ The file does not just run code once. It keeps control.
 
 | | what the attacker has | how |
 | --- | --- | --- |
-| **Their own code, in your process** | arbitrary code execution with your application's privileges — database access, cloud metadata, credentials on disk, lateral movement | configuration hijack → script filter (measured, §6) |
-| **Your application's outbound traffic** | every request your service makes — including credentials in URLs, headers and bodies — redirected to them | `http.proxyHost` / `http.proxyPort` / `https.proxyHost` set as JVM system properties (measured, §8) |
-| **Your application's TLS trust** | outbound TLS intercepted, certificate pinning defeated by a replaced trust store | `javax.net.ssl.trustStore` (same mechanism) |
-| **Your application's logs** | the attacker's configuration decides what is logged, at what level, and where — the trail of the compromise itself is under their control | the victim's configuration file is replaced |
-| **A foothold that survives** | re-established on every restart, and carried inside the artifact that gets deployed | the file lives in the jar or in the deployment directory |
+| **Their own code, in your process** | arbitrary code execution with your application's privileges — database access, cloud metadata, credentials on disk, lateral movement | configuration hijack → script filter (measured, §7) |
+| **Your application's outbound traffic** | every request your service makes — including credentials in URLs, headers and bodies — redirected to them | `http.proxyHost` / `http.proxyPort` set as JVM system properties (measured, §9) |
+| **Your application's TLS trust** | outbound TLS intercepted, certificate pinning defeated by a replaced trust store | `javax.net.ssl.trustStore` (same mechanism; not separately exercised) |
+| **Your application's logs** | the attacker's configuration decides what is logged, at what level, and where — so the trail of the compromise is under their control | the victim's configuration file is replaced (measured) |
+| **Re-application on every start** | while the file remains on the classpath, it is applied again at every start-up, and it is carried by whatever artifact contains it | follows from the mechanism (§1) and from the file being in the jar or the deployment directory |
 
-The persistence point is the one to sit with. This is not a race against a restart and not one
-compromised host. A file inside a jar is deployed by the normal release process, to every
-environment that consumes the artifact, including production.
+The last row is the one to sit with, and it is a property of the mechanism rather than a
+separate measurement: this is not a race against a restart. A file inside a jar is deployed by
+the normal release process, to every environment that consumes the artifact.
 
 ---
 
-## 4. One file, an entire estate
+## 4. How far one file reaches — *analysis, not measurement*
+
+The mechanism is general; what follows is the reasoning about how the file reaches a victim in
+practice. It is **not** a measured compromise of a real pipeline, and no pipeline was tested.
 
 ```mermaid
 flowchart TD
-    A["one 2 KB text file on a classpath"] --> B["build agent, shared host, or a dependency in the tree"]
+    A["one small text file on a classpath"] --> B["build agent, shared host, or a dependency in the tree"]
     B --> C["normal packaging - nothing in the pipeline objects"]
     C --> D["staging"]
     C --> E["production region 1"]
     C --> F["production region 2"]
     C --> G["every other consumer of that artifact"]
-    D --> H["runs on every start-up, silently"]
+    D --> H["applied again on every start-up"]
     E --> H
     F --> H
     G --> H
-    H --> I["all of them are the attacker's"]
+    H --> I["every application that loads it"]
 ```
 
-Concretely, the path that needs no luck at all:
+The path that needs no luck:
 
 1. A build agent or CI runner whose workspace is writable by another account. The attacker
    writes the two files into the build output.
@@ -149,17 +185,76 @@ Concretely, the path that needs no luck at all:
    text files with familiar names.
 3. Every environment that consumes the artifact inherits it — staging, production, every region,
    every replica.
-4. The attacker's code runs on start-up, with the application's privileges, and the application's
-   own logging configuration is gone.
+4. On start-up, the attacker's configuration is loaded instead of the application's, and the
+   attacker's code runs.
 
-The attacker never has to find the application, never has to interact with it, never has to guess
-a URL, and never has to be lucky about timing. **This is a pipeline problem, not an application
-problem** — which is why it is worth auditing every classpath you have, not just the one
-application you are worried about.
+What is *measured* about this is the last step, in isolation: the file is applied at start-up,
+the attacker's configuration takes over, and the code runs (§1, §7). What is *not* measured is
+the pipeline that carries the file there.
+
+The attacker never has to find the application, interact with it, guess a URL, or be lucky about
+timing. That is why the classpath — not the application — is the thing to audit.
 
 ---
 
-## 5. The defect, for the people who read the source
+## 5. What Apache documents, and what it does not
+
+This is the objection to expect first, so it is answered here rather than in a reply.
+
+**What the documentation says.** The Log4j 2.x manual, *Configuration properties*
+(<https://logging.apache.org/log4j/2.x/manual/systemproperties.html>), describes one line:
+
+> *"If a `log4j2.system.properties` file is available on the classpath its contents are sourced
+> into Java system properties at Log4j startup."*
+
+That is accurate, and the code does exactly that. The file name, the classpath lookup and the
+copy into the system properties are all documented or plainly visible in the source.
+
+**What the documentation does not say.**
+
+* It does not state that the classpath is a trust boundary — that anything on the classpath can
+  reconfigure the JVM. The project's own threat-model page
+  (<https://logging.apache.org/log4j/2.x/security.html>) enumerates what Log4j trusts and does
+  not trust, and the classpath is not among them.
+* It does not say that the file is applied to the **JVM's global namespace** rather than to
+  Log4j's own namespace. "Sourced into Java system properties" reads like a convenience for
+  operators; the consequence is that a classpath resource sets global JVM configuration.
+* It does not mention that the same mechanism can point Log4j at a *different configuration
+  file* (`log4j.configurationFile`) and enable script execution
+  (`log4j2.Script.enableLanguages`) — the two properties that make this a code-execution path
+  rather than a settings file.
+* It does not say what happens when the file is found: the product prints nothing. There is no
+  `StatusLogger` message, no warning, and no record that the file was applied.
+* It does not say that the file need not come from Log4j. Any artifact on the classpath can
+  carry one.
+
+**Why this is a vulnerability and not a hardening gap.** The line between the two is whether the
+vendor has stated a trust assumption that the reader can rely on. Here:
+
+1. **The outcome is code execution.** A hardening gap is a setting that can be misused; this is
+   a documented convenience that reaches code execution in the application JVM, through two
+   properties the documentation never mentions in this context.
+2. **The trust assumption is not written down.** "The classpath is trusted" is a defensible
+   position for a library — but it is a position the reader cannot know, and the project's own
+   threat model states its other assumptions explicitly.
+3. **The product's own policy is circumvented.** Log4j deliberately refuses to evaluate lookups
+   inside results on the runtime path, precisely because context data may be attacker-controlled.
+   The classpath file delivers attacker-chosen values into a namespace that the *configuration*
+   path does evaluate recursively, so a value smuggled in as a system property is evaluated by
+   the configuration substitutor — the guardrail that protects the runtime path does not extend
+   to this input channel. *Measured:* a planted `lab.leak=${env:HOME}` read back through
+   `${sys:lab.leak}` in a configuration pattern comes out expanded (`LEAK=[/home/hayden]`), not
+   as the literal expression — `lab/src/lab/PolicyProbe.java`, asserted by `lab/verify.sh`.
+4. **It happens silently and by default.** No opt-in, no warning, no trace.
+
+If the project considers the classpath a trust boundary, the reasonable outcome is a documented
+statement to that effect, plus a `StatusLogger` warning when either file is found, plus an
+explicit opt-in for the system-property copy. That is a small change, and it is the change this
+finding is asking for.
+
+---
+
+## 6. The defect, for the people who read the source
 
 `log4j-api` reads two resources by fixed name from the classpath during its own initialization.
 Neither file has to be requested, enabled, or mentioned in the application's configuration, and
@@ -188,12 +283,6 @@ The file is found on the classpath through `util/PropertyFilePropertySource.java
 class loader and the **system class loader** — the application's entire classpath, jars
 included.
 
-Apache documents the mechanism in one line, with no security guidance attached
-(<https://logging.apache.org/log4j/2.x/manual/systemproperties.html>):
-
-> *"If a `log4j2.system.properties` file is available on the classpath its contents are sourced
-> into Java system properties at Log4j startup."*
-
 Two Log4j properties turn it into code execution: `log4j.configurationFile`
 (`log4j-core` 2.26.1 `config/ConfigurationFactory.java:89`, read at `:457-460`) — the value may
 name a **classpath resource**, so the attacker's configuration can travel inside the same jar —
@@ -204,7 +293,7 @@ The 3.x API has the same code (`log4j-api` 3.0.0-beta2
 
 ---
 
-## 6. The chain to RCE, measured
+## 7. The chain to RCE, measured
 
 The planted `log4j2.system.properties` (three lines):
 
@@ -239,7 +328,7 @@ Negative control — the same application without the planted file:
 
 ---
 
-## 7. The blast radius is `log4j-api`, not `log4j-core`
+## 8. The blast radius is `log4j-api`, not `log4j-core`
 
 With **only `log4j-api` on the classpath** — no `log4j-core`, no appender, no configuration, and
 the API reporting *"Log4j API could not find a logging provider"* — the planted file still
@@ -258,7 +347,7 @@ configured Log4j".
 
 ---
 
-## 8. The plant reaches past Log4j
+## 9. The plant reaches past Log4j
 
 Because it sets **JVM** system properties, it reaches application behaviour that has nothing to
 do with logging. With `http.proxyHost` / `http.proxyPort` planted, the victim's outbound request
@@ -277,11 +366,12 @@ Host: vault.internal
 
 The credentials in the request URL were read by the attacker because a file on the classpath
 said so. The same mechanism reaches `javax.net.ssl.trustStore` (the application's TLS trust
-decisions), `https.proxyHost`, and any property a library reads lazily.
+decisions), `https.proxyHost`, and any property a library reads lazily — those two were not
+separately exercised.
 
 ---
 
-## 9. Compared with Log4Shell
+## 10. Compared with Log4Shell
 
 | | Log4Shell (CVE-2021-44228) | this finding |
 | --- | --- | --- |
@@ -294,10 +384,11 @@ decisions), `https.proxyHost`, and any property a library reads lazily.
 | Leaves a trace in the logs | often (errors, outbound LDAP) | **no** — the attacker's configuration controls the logs |
 | Needs the victim to do something | send a request | **no** |
 | Delivery | a string in a request | **a file on the classpath** |
+| Attacker's precondition | send a request | **write access to a classpath location, or control of a dependency** |
 
 ---
 
-## 10. Is your estate exposed?
+## 11. Is your estate exposed?
 
 Answer these five. If any of them is "yes", treat it as an incident until proven otherwise.
 
@@ -312,7 +403,7 @@ Answer these five. If any of them is "yes", treat it as an incident until proven
 5. **Could a third-party dependency introduce one?** A single file in a jar is enough, and
    nothing about the artifact looks unusual.
 
-## 11. What to do now
+## 12. What to do now
 
 * **Audit every classpath** — every deployment directory, every container image, every jar in
   every artifact. A match is an incident, not a finding.
@@ -331,7 +422,7 @@ file is found, and refuse to take the configuration file location from a classpa
 
 ---
 
-## 12. Detection
+## 13. Detection
 
 * Find the files: `find / -name 'log4j2.*.properties'`, and inside every jar
   `unzip -l <jar> | grep log4j2`. `scan/scan_planted.py` does both (on disk and inside jars).
@@ -344,12 +435,12 @@ file is found, and refuse to take the configuration file location from a classpa
 
 ---
 
-## 13. Reproduce it (localhost only)
+## 14. Reproduce it (localhost only)
 
 ```bash
 ./setup.sh                 # fetch jars + the Log4j sources cited in WORKUP.md
 ./lab/build.sh             # compile the victims
-./lab/verify.sh            # 14 assertions over every claim in WORKUP.md
+./lab/verify.sh            # 15 assertions over every claim in WORKUP.md
 ```
 
 By hand:
@@ -373,10 +464,11 @@ carries no target list. The command it executes in the victim JVM is `id`.
 
 ---
 
-## 14. Repository contents
+## 15. Repository contents
 
 | Path | What it is |
 | --- | --- |
+| `DISCLOSURE.md` | the shared disclosure record for both findings: timeline, status, and the report text |
 | `WORKUP.md` | the full write-up: root cause with `file:line` evidence, the measured exploitability matrix, the CVSS rationale, the target/reach/impact analysis, detection, remediation, and limitations |
 | `lab/` | the proof-of-concept: victim apps, the planted classpath resources, the attacker-side proxy, and `verify.sh` |
 | `scan/scan_planted.py` | finds planted Log4j classpath resources on disk and inside jars |
@@ -385,11 +477,11 @@ carries no target list. The command it executes in the victim JVM is `id`.
 
 A sibling repository, <https://github.com/vindeckyy/log4j-config-time-lookup-rce>, documents a
 separate finding in the same project: configuration-time evaluation of untrusted Thread Context
-Map data.
+Map data. Both are reported together — see [`DISCLOSURE.md`](DISCLOSURE.md).
 
 ---
 
-## 15. Scope and ethics
+## 16. Scope and ethics
 
 * Every server in this repository listens on `127.0.0.1`; no external host is ever contacted.
 * The payload executes `id` and writes a proof file; it does not persist, spread, or scan.
@@ -400,7 +492,7 @@ Map data.
 
 ---
 
-## 16. Limitations
+## 17. Limitations
 
 * Log4j 3.x is analysed at source level only: `log4j-core:3.0.0-beta3` needs
   `log4j-api:3.0.0-beta3`, which is not published (`log4j-api` stops at `3.0.0-beta2`), and the
@@ -413,11 +505,11 @@ Map data.
   condition; Log4j's contribution is that it trusts a fixed-name classpath resource implicitly,
   silently, and — for `log4j2.system.properties` — applies it as global JVM state.
 * The script chain was demonstrated with Groovy; any other JSR-223 engine behaves the same.
-* The estate-scale path in §4 is an analysis of the mechanism, not a measured compromise of a
-  real pipeline.
+* The pipeline path in §4 is an analysis of the mechanism, not a measured compromise of a real
+  pipeline. No pipeline, CI system or shared host was tested.
 
 ---
 
-## 17. License
+## 18. License
 
 Apache License 2.0 — see `LICENSE`.

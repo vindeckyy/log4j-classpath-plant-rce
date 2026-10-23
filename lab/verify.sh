@@ -67,6 +67,14 @@ else
     report missed captured "proxy captured the victim's request" missed
 fi
 
+echo "== 7: the planted value reaches the recursive (configuration) substitutor"
+leak=$("$JAVA" -cp "lib/log4j-api-2.26.1.jar:lib/log4j-core-2.26.1.jar:lab/build/victim:lab/poison-policy" lab.PolicyProbe 2>&1 | grep -o 'LEAK=\[[^]]*\]' | head -1)
+if [ -n "$leak" ] && [ "$leak" != 'LEAK=[${env:HOME}]' ]; then
+    report expanded expanded "planted property evaluated recursively at config time" "$leak"
+else
+    report "$leak" expanded "planted property evaluated recursively at config time" "$leak"
+fi
+
 echo
 if [ "$fail" -eq 0 ]; then
     echo "ALL CHECKS PASSED"

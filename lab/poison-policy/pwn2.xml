@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Configuration used by PolicyProbe: the pattern interpolates ${sys:lab.leak}, a system
+  property that the planted file set to ${env:HOME}. A recursive substitutor expands it to the
+  environment variable; a non-recursive one would leave the literal expression in the pattern.
+-->
+<Configuration status="WARN" name="policy-probe">
+  <Appenders>
+    <Console name="Console" target="SYSTEM_OUT">
+      <PatternLayout pattern="LEAK=[${sys:lab.leak}] %m%n"/>
+    </Console>
+  </Appenders>
+  <Loggers>
+    <Root level="info">
+      <AppenderRef ref="Console"/>
+    </Root>
+  </Loggers>
+</Configuration>
