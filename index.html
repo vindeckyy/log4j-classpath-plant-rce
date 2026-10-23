@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proof of concept — Apache Log4j classpath plant</title>
+<style>
+  :root {
+    --bg: #0b0e16;
+    --surface: #121722;
+    --border: #262f42;
+    --text: #e8edf5;
+    --text2: #acb7c9;
+    --muted: #7a8699;
+    --accent: #ff4d5a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: Inter, "Helvetica Neue", Arial, sans-serif; line-height: 1.55;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 48px 24px 80px; }
+  .kicker {
+    text-transform: uppercase; letter-spacing: .14em; font-size: 13px;
+    color: var(--muted); font-weight: 700; margin: 0 0 14px;
+  }
+  h1 { font-size: 42px; line-height: 1.15; margin: 0 0 14px; letter-spacing: -.02em; }
+  .sub { color: var(--text2); font-size: 19px; margin: 0 0 28px; max-width: 820px; }
+  video {
+    width: 100%; border-radius: 14px; border: 1px solid var(--border);
+    background: #000; display: block;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0 36px; }
+  a.btn {
+    color: var(--text); text-decoration: none; border: 1px solid var(--border);
+    background: var(--surface); padding: 9px 16px; border-radius: 10px; font-size: 15px;
+  }
+  a.btn:hover { border-color: var(--accent); }
+  h2 { font-size: 19px; margin: 0 0 14px; }
+  table { border-collapse: collapse; width: 100%; max-width: 720px; }
+  td { padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,.06); font-size: 16px; }
+  td.t { color: var(--muted); width: 86px; font-variant-numeric: tabular-nums; }
+  td.c { color: var(--text2); }
+  tr:hover td.c { color: var(--text); }
+  .note {
+    margin-top: 40px; padding: 18px 20px; border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: 10px; background: var(--surface);
+    color: var(--text2); font-size: 15px;
+  }
+  .note a { color: var(--text); }
+  footer { margin-top: 34px; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Proof of concept · Apache Log4j classpath plant</p>
+  <h1>Two text files. One classpath. Full code execution.</h1>
+  <p class="sub">
+    8 minutes, 1080p, English narration with burned-in captions. The footage is captured from
+    <code>lab/</code> when the video is rendered, so it shows the output the proof of concept
+    actually prints. Every command in it runs on localhost.
+  </p>
+
+  <video id="v" controls preload="metadata" poster="thumbnail.jpg">
+    <source src="log4j-classpath-plant-poc.mp4" type="video/mp4">
+    Your browser cannot play this file. Use the download links below.
+  </video>
+
+  <div class="row">
+    <a class="btn" href="log4j-classpath-plant-poc.mp4" download>Download the video (mp4)</a>
+    <a class="btn" href="log4j-classpath-plant-poc.srt" download>Subtitles (srt)</a>
+    <a class="btn" href="https://github.com/vindeckyy/log4j-classpath-plant-rce">The full write-up</a>
+  </div>
+
+  <h2>Chapters</h2>
+  <table id="chapters">
+    <tr><td class="t">0:00</td><td class="c">Cold open — the finding in one line</td></tr>
+    <tr><td class="t">0:26</td><td class="c">Background: what Log4j is, what the classpath is</td></tr>
+    <tr><td class="t">0:56</td><td class="c">The mechanism: the two fixed-name classpath resources</td></tr>
+    <tr><td class="t">1:33</td><td class="c">The payload: log4j2.system.properties, line by line</td></tr>
+    <tr><td class="t">2:01</td><td class="c">The attacker's configuration: pwn.xml</td></tr>
+    <tr><td class="t">2:25</td><td class="c">Proof of concept: the live exploit</td></tr>
+    <tr><td class="t">2:46</td><td class="c">The ordering: the payload runs before the first log line</td></tr>
+    <tr><td class="t">3:05</td><td class="c">Negative control: without the file, nothing happens</td></tr>
+    <tr><td class="t">3:20</td><td class="c">Blast radius: log4j-api alone, no log4j-core</td></tr>
+    <tr><td class="t">3:49</td><td class="c">Blast radius: the file travelling inside a dependency jar</td></tr>
+    <tr><td class="t">4:12</td><td class="c">Blast radius: outbound traffic redirected, credentials captured</td></tr>
+    <tr><td class="t">4:44</td><td class="c">Why it matters: five reasons</td></tr>
+    <tr><td class="t">5:40</td><td class="c">Comparison with Log4Shell</td></tr>
+    <tr><td class="t">6:07</td><td class="c">Reach: one file, every environment</td></tr>
+    <tr><td class="t">6:37</td><td class="c">What to do now: audit, remove, rebuild, harden</td></tr>
+    <tr><td class="t">7:31</td><td class="c">Disclosure</td></tr>
+  </table>
+
+  <p class="note">
+    This page is part of the same repository and the same first disclosure:
+    <a href="https://github.com/vindeckyy/log4j-classpath-plant-rce">vindeckyy/log4j-classpath-plant-rce</a>.
+    Nothing here has been sent to a vendor or published anywhere else. If you run Log4j, forward
+    the report to <a href="mailto:security@apache.org">security@apache.org</a>.
+  </p>
+
+  <footer>
+    Apache Log4j is a trademark of the Apache Software Foundation. This material is an independent
+    security analysis, published for disclosure and remediation.
+  </footer>
+</div>
+<script>
+  const v = document.getElementById('v');
+  document.querySelectorAll('#chapters tr').forEach(row => {
+    const t = row.querySelector('.t').textContent.trim();
+    const [m, s] = t.split(':').map(Number);
+    row.style.cursor = 'pointer';
+    row.title = 'Jump to ' + t;
+    row.addEventListener('click', () => {
+      v.currentTime = m * 60 + s;
+      v.play();
+    });
+  });
+</script>
+</body>
+</html>
