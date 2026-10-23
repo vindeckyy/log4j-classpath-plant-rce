@@ -13,11 +13,28 @@ CWE-200 (information exposure)
 **Verified vulnerable by execution:** 2.14.1, 2.17.1, 2.24.0, 2.25.1, 2.26.1 (current release);
 `log4j-api` alone (no `log4j-core`, no logging provider) for the system-property half
 **Verified not reachable:** properties the JVM reads at start-up — the JMX agent was tested and
-rejected (§9)
+rejected (§11)
 
 Everything below was derived by reading the sources in `sources/` and by running the attacks in
 `lab/`. The exploitability claims are measured output of `lab/verify.sh` (14 assertions, all
 passing — see Appendix B), not restatements of an advisory database.
+
+### Severity rationale
+
+| Metric | Value | Justification, grounded in this lab |
+| --- | --- | --- |
+| Attack Vector (AV) | Network | The file is delivered over whatever channel put it on the classpath — a dependency resolution, an artifact download, a shared filesystem, a build workspace. It is also remotely *effective*: the payload runs in the victim JVM and the plant can redirect the victim's outbound traffic (measured, §4). |
+| Attack Complexity (AC) | Low | One file with fixed, guessable names. No race, no timing, no memory grooming, no gadget chain, no victim interaction. Measured: a single `java -cp …` invocation. |
+| Privileges Required (PR) | Low | Writing one file into a directory on the classpath — a deployment directory, a build workspace, a shared lib directory. A poisoned dependency needs no privileges at all: it arrives through the normal resolution process. |
+| User Interaction (UI) | None | Fully automatic: Log4j reads the file during its own initialization, and the script filter executes during configuration start-up — before the application's first log statement (measured, §2.2). |
+| Scope (S) | Changed | The attacker starts with "can put a file on a classpath" and ends with code execution in the application JVM plus control of that JVM's configuration — a different security authority, and typically a different trust level (the build/dependency chain vs. the running service). |
+| Confidentiality (C) | High | Arbitrary code in the app process: read any file, env var, secret, key material. Independently, the plant redirects the application's outbound traffic and can replace its TLS trust (measured, §4). |
+| Integrity (I) | High | Arbitrary code; and the application's logging configuration — its evidence trail — is under the attacker's control. |
+| Availability (A) | High | Arbitrary code: kill the process, consume resources, pivot to the next service on the same classpath. |
+
+CVSS 3.1 base score for `AV:N/AC:L/PR:L/UI:N/S:C/C:H/I:H/A:H` = **8.8 (High)**, and
+`10.0 (Critical)` where the file arrives through the dependency chain (PR:N) — which is the
+supply-chain case measured in §2.3.
 
 ---
 
@@ -195,7 +212,7 @@ The same application without the planted file:
 
 | log4j-core | 2.14.1 | 2.17.1 | 2.24.0 | 2.25.1 | **2.26.1** | 3.0.0-beta3 |
 | --- | --- | --- | --- | --- | --- | --- |
-| RCE via planted classpath resource | yes | yes | yes | yes | **yes** | source-level only (§9) |
+| RCE via planted classpath resource | yes | yes | yes | yes | **yes** | source-level only (§11) |
 
 The more important row is the api-only one. With **only `log4j-api` on the classpath** — no
 `log4j-core`, no appender, no configuration, and the API reporting *"Log4j API could not find a
@@ -305,19 +322,102 @@ configuration is what gets overwritten.
 
 ## 7. Remediation
 
-* Treat the classpath as a trust boundary: nothing on it may be writable by anyone other than
-  the identity that runs the application, and every jar on it should be checksum-verified in CI.
-* Do not ship `log4j2.system.properties` or `log4j2.component.properties` in an artifact unless
-  that is the artifact's documented purpose.
-* Upstream fix direction — Log4j should not silently promote a classpath resource into JVM
-  system properties. At minimum it should:
-  * require an explicit opt-in for that behaviour;
-  * log a warning through `StatusLogger` when either file is found;
-  * refuse to take the configuration file location from a classpath resource.
+Do these now:
+
+* **Audit every classpath** — every deployment directory, every container image, every jar in
+  every artifact — for `log4j2.system.properties` and `log4j2.component.properties`. A match is
+  an incident, not a finding: assume the configuration was taken over until proven otherwise.
+* **Remove the files** from artifacts and from deployment directories, then re-build and
+  re-deploy the artifacts that contained them. Deleting the file from a running host is not
+  enough — if it was in the artifact, the next deploy brings it back.
+* **Make the classpath a trust boundary.** Nothing on it may be writable by anyone other than
+  the identity that runs the application. Verify every jar on it by checksum in CI, and verify
+  the *contents* of the build workspace before packaging.
+* **Keep scripting disabled** (`log4j2.Script.enableLanguages` unset). It is the execution path
+  the plant uses, and an environment without a JSR-223 engine fails closed.
+* **Do not ship `log4j2.system.properties` or `log4j2.component.properties`** in an artifact
+  unless that is the artifact's documented purpose.
+
+Upstream fix direction — Log4j should not silently promote a classpath resource into JVM system
+properties. At minimum it should:
+
+* require an explicit opt-in for that behaviour;
+* log a warning through `StatusLogger` when either file is found;
+* refuse to take the configuration file location from a classpath resource.
 
 ---
 
-## 8. What I did not verify
+## 8. The worst realistic path
+
+The mechanism is general; the interesting question is where the file comes from in practice. The
+path that needs no luck at all:
+
+1. **A build agent or CI runner whose workspace is writable by another account.** The attacker
+   writes `log4j2.system.properties` and `pwn.xml` into the build output directory.
+2. **The normal release process packages them.** Nothing in a build pipeline looks at two small
+   text files with familiar names.
+3. **Every environment that consumes the artifact inherits it** — staging, production, every
+   region, every replica. The file is inert until Log4j runs, and then it runs with the
+   application's privileges.
+4. **Nothing in the application's own logs records it.** The attacker's configuration decides
+   the log level, so it can also remove the evidence from the log stream.
+
+The attacker does not need to find the application, does not need to interact with it, does not
+need to guess a URL, and does not need to be lucky about timing. This is what makes the finding
+a *pipeline* problem rather than an *application* problem.
+
+Two variants deserve separate mention because they do not need a build pipeline at all:
+
+* **A shared application server.** A directory on the classpath (`/opt/app/lib`, `WEB-INF/lib`)
+  that the deploy account can write to, while the service runs as a different account. The
+  plant persists across restarts and is re-applied on every start.
+* **A writable current directory.** The current directory is on the classpath for a large share
+  of legacy start scripts (`java -cp .:lib/* …`), which turns "a writable working directory"
+  into "control of the application's configuration".
+
+---
+
+## 9. Defence evasion and persistence
+
+The plant's second effect is the one that makes it hard to find: **the attacker's configuration
+replaces the victim's**. That has three consequences that no log-based detection will catch.
+
+* **The evidence can be suppressed.** The attacker's `pwn.xml` is a normal Log4j configuration.
+  It can set the root level, choose the layout, or point the appender somewhere else. The
+  application's log stream is under the attacker's control from the moment the application
+  starts.
+* **The compromise survives restarts and redeployments.** If the file is inside the artifact,
+  every restart re-establishes it. If it is in the deployment directory, it is re-read at every
+  start. Neither requires the attacker to be present at the moment of exploitation.
+* **The forensic trail is thin.** `StatusLogger` prints nothing when it finds either file — the
+  copy of `PropertiesUtil` that reads `log4j2.system.properties` has no log statement at all,
+  only a warning for the `SecurityException` case. The only observable trace of the RCE path is
+  whatever the payload itself emits.
+
+The detection guidance in §6 is therefore not "watch the logs" but "audit the classpath".
+
+---
+
+## 10. Comparison with Log4Shell
+
+| | Log4Shell (CVE-2021-44228) | this finding |
+| --- | --- | --- |
+| Vulnerable versions required | yes — fixed in 2.17.1 | **no — the current release is affected** |
+| Attacker-controlled data must reach the log path | yes | **no** |
+| Thread Context Map involvement | in some variants | **no** |
+| Application's configuration must be unusual | no | **no** — the configuration is what gets replaced |
+| Any optional Log4j feature must be enabled | no | **no** — scripting is enabled by the planted file |
+| Affects applications that only have `log4j-api` | no | **yes** |
+| Leaves a trace in the logs | often (errors, outbound LDAP) | **no** — the attacker's configuration controls the logs |
+| Needs the victim to do something | send a request | **no** |
+| Delivery | a string in a request | **a file on the classpath** |
+
+The two findings are independent: neither needs the other, and fixing Log4Shell (2.16.0,
+2.17.1) does not affect this one.
+
+---
+
+## 11. What I did not verify
 
 * **Log4j 3.x at runtime.** `log4j-core:3.0.0-beta3` needs `log4j-api:3.0.0-beta3`, which is not
   published (`log4j-api` stops at `3.0.0-beta2`), and the beta2/beta3 combination does not load
@@ -342,13 +442,13 @@ configuration is what gets overwritten.
 lab/src/lab/ClasspathPoison.java  victim: an ordinary app on a poisoned classpath
 lab/src/lab/ApiOnly.java          victim: log4j-api only, no core, no logging provider
 lab/src/lab/ProxyVictim.java      victim: outbound traffic redirected by the plant
-lab/src/lab/JmxVictim.java        victim for the rejected JMX variant (§8)
+lab/src/lab/JmxVictim.java        victim for the rejected JMX variant (§11)
 lab/src/lab/JmxProbe.java         attacker side of the rejected JMX variant
 lab/poison/                       planted classpath resources: log4j2.system.properties + pwn.xml
 lab/poison-component/             planted classpath resource variant: log4j2.component.properties
 lab/poison-jar/                   the same two files, shipped inside a dependency jar
 lab/poison-proxy/                 planted http.proxyHost / http.proxyPort
-lab/poison-jmx/                   planted JMX properties (rejected variant, §8)
+lab/poison-jmx/                   planted JMX properties (rejected variant, §11)
 lab/proxy_capture.py              attacker-side fake HTTP proxy for the traffic proof
 lab/build.sh                      compiles the victims and packs the poisoned dependency jar
 lab/verify.sh                     asserts every claim in this document
