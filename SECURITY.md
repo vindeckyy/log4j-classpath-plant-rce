@@ -10,9 +10,13 @@ code execution. See `README.md` for the finding and `WORKUP.md` for the full ana
 **Disclosure status:** the behaviour of `log4j2.system.properties` is documented by the Log4j
 project (a convenience feature); the security consequence — that a classpath resource silently
 reconfigures the JVM and hijacks Log4j's configuration — is not addressed anywhere in that
-documentation or in any advisory. This repository is the first public write-up of that
-consequence. It has not been reported to the Apache Logging Services project or any other
-vendor, and it has not been published anywhere else before this repository.
+documentation or in any advisory.
+
+This finding was derived in the same audit as the configuration-time evaluation finding in the
+sibling repository `log4j-vuln-lab`, where it was first written up in that repository's
+history (commit `e31dbee`) before it was moved here for a separate disclosure. It has not been
+reported to the Apache Logging Services project or any other vendor, and it has not been
+published anywhere else.
 
 ## If you are affected
 

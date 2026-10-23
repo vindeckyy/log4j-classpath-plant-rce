@@ -1,11 +1,15 @@
 # Apache Log4j — the classpath resources Log4j trusts without asking
 
-> **Disclosure status — first and only public write-up of this security consequence.**
+> **Disclosure status.**
 > The behaviour itself is a documented Log4j convenience. The *security* consequence — that a
-> classpath resource silently reconfigures the JVM and takes over Log4j's configuration — had
+> classpath resource silently reconfigures the JVM and takes over Log4j's configuration — has
 > not been reported to the Apache Logging Services project, not sent to any vendor, not shared
 > with any third party, and not published in an advisory, mailing list post, blog, conference
-> talk, preprint, issue tracker, or chat anywhere else before this repository.
+> talk, preprint, issue tracker, or chat anywhere else.
+>
+> This finding was derived in the same audit as the configuration-time evaluation finding in the
+> sibling repository `log4j-vuln-lab`, where it was first written up in that repository's
+> history (commit `e31dbee`) before it was moved here for a separate disclosure.
 >
 > If you run Log4j and this affects you, please forward this to the vendor:
 > <security@apache.org> (the Apache Logging Services security process, per
