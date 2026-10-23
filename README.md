@@ -1,11 +1,5 @@
 # Apache Log4j — the classpath resources Log4j trusts without asking
 
-> **Video.** [`video/out/log4j-classpath-plant-poc.mp4`](video/out/log4j-classpath-plant-poc.mp4)
-> (1920×1080, ~8 min) walks through the proof of concept end to end: the mechanism, the live
-> exploit, the negative control, the supply-chain case, the outbound-traffic capture, the
-> comparison with Log4Shell, and the remediation. Every command in it runs `lab/` on localhost.
-> Rebuild it with [`video/README.md`](video/README.md).
-
 > **Disclosure status.**
 > The behaviour itself is a documented Log4j convenience. The *security* consequence — that a
 > classpath resource silently reconfigures the JVM and takes over Log4j's configuration — has
@@ -21,6 +15,37 @@
 > If you run Log4j and this affects you, please forward this to the vendor:
 > <security@apache.org> (the Apache Logging Services security process, per
 > <https://logging.apache.org/security.html>).
+
+## Proof-of-concept video
+
+[![Proof of concept: two text files on the classpath, full code execution](video/out/thumbnail.jpg)](video/out/log4j-classpath-plant-poc.mp4)
+
+**Two text files. One classpath. Full code execution.** — 8 minutes, 1080p, English narration with
+burned-in captions ([`.srt`](video/out/log4j-classpath-plant-poc.srt) alongside). The footage is
+captured from `lab/` when the video is rendered, so it shows the output the proof of concept
+actually prints; every command in it runs on localhost.
+
+| time | chapter |
+| --- | --- |
+| 0:00 | Cold open — the finding in one line |
+| 0:26 | Background: what Log4j is, what the classpath is |
+| 0:56 | The mechanism: the two fixed-name classpath resources |
+| 1:33 | The payload: `log4j2.system.properties`, line by line |
+| 2:01 | The attacker's configuration: `pwn.xml` |
+| 2:25 | Proof of concept: the live exploit |
+| 2:46 | The ordering: the payload runs before the application's first log line |
+| 3:05 | Negative control: without the file, nothing happens |
+| 3:20 | Blast radius: `log4j-api` alone, no `log4j-core` |
+| 3:49 | Blast radius: the file travelling inside a dependency jar |
+| 4:12 | Blast radius: outbound traffic redirected, credentials captured |
+| 4:44 | Why it matters: five reasons |
+| 5:40 | Comparison with Log4Shell |
+| 6:07 | Reach: one file, every environment |
+| 6:37 | What to do now: audit, remove, rebuild, harden |
+| 7:31 | Disclosure |
+
+Rebuild it with [`video/README.md`](video/README.md): the script is [`video/script.py`](video/script.py),
+the renderer is [`video/build.py`](video/build.py).
 
 **Component:** `org.apache.logging.log4j:log4j-api` (the property loader) and
 `org.apache.logging.log4j:log4j-core` (the configuration it hijacks)
@@ -478,7 +503,7 @@ carries no target list. The command it executes in the victim JVM is `id`.
 | `WORKUP.md` | the full write-up: root cause with `file:line` evidence, the measured exploitability matrix, the CVSS rationale, the target/reach/impact analysis, detection, remediation, and limitations |
 | `lab/` | the proof-of-concept: victim apps, the planted classpath resources, the attacker-side proxy, and `verify.sh` |
 | `scan/scan_planted.py` | finds planted Log4j classpath resources on disk and inside jars |
-| `video/` | the proof-of-concept video: script, renderer and the rendered `mp4` + `srt` |
+| `video/` | the proof-of-concept video: the script, the renderer, and the rendered `mp4`, `srt` and thumbnail |
 | `setup.sh` | downloads the jars and the sources the citations point at |
 | `lib/`, `sources/`, `lab/build/` | downloaded artifacts and build output, created by `setup.sh` and `lab/build.sh` — not stored in git |
 
